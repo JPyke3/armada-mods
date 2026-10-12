@@ -1,0 +1,423 @@
+#!/usr/bin/env python3
+"""Second-screen host: one fullscreen surface on the bottom panel that
+shows what the game-side provider sends, and passes touch input back to it.
+
+A mod ships this (or its own program) and names it as "second_screen" in
+mod.json. The launch wrapper starts it on the bottom screen with the game
+and stops it when the game exits.
+The provider connects on 127.0.0.1:47800 and names its Steam app id, which
+must be one this mod is for. Pixel providers stream frames; a mod with a
+view/index.html gets JSON state rendered by that page. A provider may do both:
+the page is drawn over the frames and shows them wherever it is transparent.
+The window takes the bottom screen as soon as the host starts, with the page
+(or a loading line) on it. It is hidden again, so the normal bottom screen
+returns, only if no provider turns up, the provider goes away and stays away,
+or the provider asks for it.
+"""
+import collections, json, os, queue, signal, socket, struct, sys, threading, time
+# the bottom gamescope only gives focus to X11 clients
+os.environ.setdefault("GDK_BACKEND", "x11")
+import gi
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+from gi.repository import Gtk, Gdk, GLib, Graphene
+
+PORT = int(os.environ.get("ARMADA_SECOND_SCREEN_PORT", "47800"))
+MOD = os.environ.get("ARMADA_MOD_PACKAGE_DIR") or os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+with open(os.path.join(MOD, "mod.json")) as f:
+    META = json.load(f)
+APPIDS = META["steam_appids"]
+VIEW_DIR = os.path.realpath(os.path.join(MOD, "view")) + os.sep
+HAS_VIEW = os.path.exists(VIEW_DIR + "index.html")
+# How long the window is kept without a provider: after starting, and after a provider is lost.
+WAIT_START, WAIT_LOST = 90, 15
+HELLO, FRAME, STATE, INPUT, CONFIG, CMD = 1, 2, 3, 16, 17, 18
+MAX_JSON = 1 << 20
+MAX_SIDE = 4096
+# Development only: a directory for injecting messages and reading replies.
+DEBUG_DIR = None
+if os.environ.get("ARMADA_MOD_DEV"):
+    DEBUG_DIR = os.environ.get("ARMADA_SECOND_SCREEN_DEBUG") or os.path.join(
+        os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "armada-second-screen-debug")
+# Injected into HTML views: armada.send(obj) goes to the provider, armada.onState(obj) receives its state.
+# armada.data and armada.game are file URLs of the mod's data folder and the game's install.
+VIEW_SHIM = """window.armada = window.armada || {
+  onState: null, last: null, data: %s, game: %s,
+  send: function (o) { window.webkit.messageHandlers.armada.postMessage(JSON.stringify(o)); },
+  _state: function (o) { this.last = o; if (this.onState) this.onState(o); }
+};""" % tuple(json.dumps("file://" + os.environ[k].rstrip("/") + "/" if os.environ.get(k) else "")
+              for k in ("ARMADA_MOD_DATA_DIR", "ARMADA_MOD_GAME_DIR"))
+
+
+def log(*a):
+    print(time.strftime("%H:%M:%S"), *a, file=sys.stderr, flush=True)
+
+
+class Surface(Gtk.Widget):
+    def __init__(self):
+        super().__init__()
+        self.texture = None
+        self.set_hexpand(True); self.set_vexpand(True)
+
+    def do_snapshot(self, snap):
+        w, h = self.get_width(), self.get_height()
+        snap.append_color(Gdk.RGBA(0.016, 0.016, 0.03, 1), Graphene.Rect().init(0, 0, w, h))
+        if self.texture is not None:
+            snap.save()
+            # frames arrive bottom-up
+            snap.translate(Graphene.Point().init(0, h))
+            snap.scale(1, -1)
+            snap.append_texture(self.texture, Graphene.Rect().init(0, 0, w, h))
+            snap.restore()
+
+
+class Session:
+    """One attached provider. Everything it queued dies with it."""
+    def __init__(self, conn):
+        self.conn = conn
+        self.hello = {}
+        self.out = queue.Queue(maxsize=256)
+        self.alive = True
+        self.fb = None; self.fb_size = None; self.dirty = False
+        self.lock = threading.Lock()
+        self.states = collections.deque(maxlen=64); self.state_pending = False
+        self.visible = True
+        self.message = None
+
+    def close(self):
+        self.alive = False
+        try: self.conn.shutdown(socket.SHUT_RDWR)
+        except OSError: pass
+        try: self.conn.close()
+        except OSError: pass
+
+
+class Host(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="org.armada.SecondScreen")
+        self.session = None
+        self.web = None
+        self.view_ready = False
+        self.sent_size = None
+        self.seen_size = None
+        self.waiting = True
+        self.deadline = 0
+
+    def do_activate(self):
+        self.win = Gtk.ApplicationWindow(application=self, title="Armada Second Screen")
+        self.win.set_decorated(False)
+        self.surface = Surface()
+        self.stack = Gtk.Stack()
+        # an HTML view is laid over the pixel surface
+        self.layers = Gtk.Overlay(child=self.surface)
+        self.stack.add_named(self.layers, "view")
+        self.hint = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER)
+        self.hint.add_css_class("hint")
+        css = Gtk.CssProvider()
+        css.load_from_string("window { background: #04040a; } .hint { color: #b8b8c8; font-size: 28px; padding: 60px; }")
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.stack.add_named(self.hint, "hint")
+        self.win.set_child(self.stack)
+        self.hold()
+        drag = Gtk.GestureDrag()
+        drag.connect("drag-begin", lambda g, x, y: self.touch("down", x, y))
+        drag.connect("drag-update", lambda g, dx, dy: self.touch("move", *self.drag_pos(g, dx, dy)))
+        drag.connect("drag-end", lambda g, dx, dy: self.touch("up", *self.drag_pos(g, dx, dy)))
+        self.surface.add_controller(drag)
+        zoom = Gtk.GestureZoom()
+        zoom.connect("scale-changed", lambda g, s: self.send(INPUT, {"t": "zoom", "s": round(s, 4)}))
+        zoom.connect("end", lambda g, seq: self.send(INPUT, {"t": "zoomend"}))
+        self.surface.add_controller(zoom)
+        if HAS_VIEW: self.load_view()
+        self.show()
+        self.wait_for_provider(WAIT_START)
+        GLib.timeout_add(250, self.push_config)
+        threading.Thread(target=self.serve, daemon=True).start()
+        if DEBUG_DIR:
+            os.makedirs(DEBUG_DIR, exist_ok=True)
+            GLib.timeout_add(200, self.debug_poll)
+        signal.signal(signal.SIGTERM, lambda *a: self.quit())
+
+    @staticmethod
+    def drag_pos(g, dx, dy):
+        ok, sx, sy = g.get_start_point()
+        return sx + dx, sy + dy
+
+    def touch(self, kind, x, y):
+        w, h = max(self.surface.get_width(), 1), max(self.surface.get_height(), 1)
+        self.send(INPUT, {"t": kind, "x": round(x / w, 4), "y": round(y / h, 4)})
+
+    # Never blocks the UI: a provider that stops reading is dropped by its writer thread.
+    def send(self, typ, obj):
+        s = self.session
+        if s is None or not s.alive: return
+        body = (obj if isinstance(obj, str) else json.dumps(obj)).encode()
+        try:
+            s.out.put_nowait(b"A2SS" + struct.pack("<HHII", typ, 0, len(body), 0) + body)
+        except queue.Full:
+            s.close()
+
+    def debug_poll(self):
+        p = os.path.join(DEBUG_DIR, "cmd")
+        try:
+            t = open(p).read().strip()
+            typ, _, text = t.partition(":")
+            if typ.isdigit():  # a half-written file is retried on the next poll
+                os.remove(p)
+                self.send(int(typ), text)
+            elif typ == "js" and self.web is not None:  # run script in the view, to drive it without a finger
+                os.remove(p)
+                self.web.evaluate_javascript(text, -1, None, None, None, None, None)
+        except OSError:
+            pass
+        return True
+
+    def serve(self):
+        srv = socket.socket()
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            srv.bind(("127.0.0.1", PORT)); srv.listen(4)
+        except OSError as e:
+            # another mod's host already has the bottom screen
+            log("cannot listen:", e)
+            GLib.idle_add(self.quit)
+            return
+        while True:
+            c, _ = srv.accept()
+            c.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            s = Session(c)
+            try:
+                c.settimeout(3)
+                self.handshake(s)
+                c.settimeout(None)
+            except Exception as e:
+                log("rejected:", repr(e))
+                s.close()
+                continue
+            self.session = s
+            log("attached", s.hello)
+            threading.Thread(target=self.writer, args=(s,), daemon=True).start()
+            GLib.idle_add(self.attached, s)
+            try:
+                self.pump(s)
+            except Exception as e:
+                log("provider gone:", repr(e))
+            s.close()
+            self.session = None
+            # finish cleanup before the next provider can attach
+            done = threading.Event()
+            GLib.idle_add(lambda: (self.detached(), done.set(), False)[2])
+            done.wait(2)
+
+    @staticmethod
+    def recvn(c, n):
+        buf = bytearray(n); view = memoryview(buf); got = 0
+        while got < n:
+            r = c.recv_into(view[got:], n - got)
+            if r == 0: raise EOFError
+            got += r
+        return buf
+
+    def read_msg(self, c):
+        hd = self.recvn(c, 16)
+        if hd[:4] != b"A2SS": raise ValueError("bad magic")
+        typ, flags, ln, seq = struct.unpack("<HHII", hd[4:])
+        limit = 16 + MAX_SIDE * MAX_SIDE * 4 if typ == FRAME else MAX_JSON
+        if ln > limit: raise ValueError("oversized")
+        return typ, self.recvn(c, ln)
+
+    def handshake(self, s):
+        typ, body = self.read_msg(s.conn)
+        if typ != HELLO: raise ValueError("expected HELLO")
+        hello = json.loads(body.decode())
+        # the port is shared, so a provider from some other game can turn up here
+        if hello.get("appid") not in APPIDS: raise PermissionError("provider is for another game")
+        s.hello = hello
+
+    def writer(self, s):
+        try:
+            s.conn.setsockopt(socket.SOL_SOCKET, socket.SO_SNDTIMEO, struct.pack("ll", 2, 0))
+            while s.alive:
+                try: data = s.out.get(timeout=0.5)
+                except queue.Empty: continue
+                s.conn.sendall(data)
+        except OSError:
+            pass
+        s.close()
+
+    def pump(self, s):
+        while True:
+            typ, body = self.read_msg(s.conn)
+            if typ == FRAME:
+                sw, sh, fmt, _, x, y, w, h = struct.unpack("<HHHHHHHH", body[:16])
+                if sw > MAX_SIDE or sh > MAX_SIDE or len(body) - 16 != w * h * 4 or x + w > sw or y + h > sh:
+                    raise ValueError("bad frame")
+                with s.lock:
+                    full = (w, h) == (sw, sh)
+                    if s.fb is None or s.fb_size != (sw, sh):
+                        if not full: continue  # a partial update needs a full frame to build on
+                        s.fb = bytearray(sw * sh * 4); s.fb_size = (sw, sh)
+                    px = memoryview(body)[16:]
+                    if full:
+                        s.fb[:] = px
+                    else:
+                        for row in range(h):
+                            o = ((y + row) * sw + x) * 4
+                            s.fb[o:o + w * 4] = px[row * w * 4:(row + 1) * w * 4]
+                    first = not s.dirty
+                    s.dirty = True
+                if first: GLib.idle_add(self.present, s)
+            elif typ == STATE:
+                text = body.decode()
+                obj = json.loads(text)
+                if not isinstance(obj, dict): raise ValueError("state must be an object")
+                if "reply" in obj and len(obj) == 1:
+                    if DEBUG_DIR:
+                        with open(os.path.join(DEBUG_DIR, "replies"), "a") as f: f.write(str(obj["reply"]) + "\n---\n")
+                    continue
+                with s.lock:
+                    # delivered in order; a view that falls far behind loses the oldest
+                    s.states.append(json.dumps(obj))
+                    s.visible = obj.get("visible", True) is not False
+                    msg = obj.get("message")
+                    s.message = msg[:200] if isinstance(msg, str) and msg else None
+                    first = not s.state_pending
+                    s.state_pending = True
+                if first: GLib.idle_add(self.apply_state, s)
+
+    # ---- UI thread from here down ----
+
+    def attached(self, s):
+        if s is not self.session: return False
+        self.sent_size = None
+        self.show()
+        if self.view_ready: self.apply_state(s)
+        return False
+
+    # Without a provider the window stays up for a while, then gives the screen back.
+    def wait_for_provider(self, seconds):
+        self.waiting = True
+        self.deadline += 1
+        GLib.timeout_add_seconds(seconds, self.give_up, self.deadline)
+
+    def give_up(self, deadline):
+        if deadline == self.deadline and self.session is None:
+            self.waiting = False
+            self.show()
+        return False
+
+    def show(self):
+        s = self.session
+        if s is None:
+            want, line = self.waiting, None if HAS_VIEW else "Loading %s" % META.get("name", "")
+        else:
+            # a pixel provider with nothing to draw can say why in one line
+            line = None if HAS_VIEW else s.message
+            want = s.visible or bool(line)
+        if line:
+            self.hint.set_text(line)
+            self.stack.set_visible_child_name("hint")
+        else:
+            self.stack.set_visible_child_name("view")
+        if want and not self.win.get_visible():
+            self.win.fullscreen()
+            self.win.present()
+        elif not want and self.win.get_visible():
+            self.win.set_visible(False)
+
+    def detached(self):
+        self.surface.texture = None
+        # the page starts over, so it shows its idle screen and not the last state
+        if HAS_VIEW: self.load_view()
+        self.wait_for_provider(WAIT_LOST)
+        self.show()
+
+    # HTML views live in the mod: view/index.html
+    def load_view(self):
+        gi.require_version("WebKit", "6.0")
+        from gi.repository import WebKit
+        if self.web is None:
+            ucm = WebKit.UserContentManager()
+            ucm.add_script(WebKit.UserScript.new(VIEW_SHIM, WebKit.UserContentInjectedFrames.TOP_FRAME,
+                                                 WebKit.UserScriptInjectionTime.START, None, None))
+            ucm.register_script_message_handler("armada", None)
+            ucm.connect("script-message-received::armada", self.view_message)
+            self.web = WebKit.WebView(user_content_manager=ucm)
+            self.web.set_background_color(Gdk.RGBA(0, 0, 0, 0))
+            self.web.connect("decide-policy", self.view_policy, WebKit)
+            self.web.connect("load-changed", self.view_loaded, WebKit)
+            self.layers.add_overlay(self.web)
+        self.view_ready = False
+        self.web.load_uri("file://" + VIEW_DIR + "index.html")
+
+    # A view may only ever show files from its own mod.
+    def view_policy(self, web, decision, kind, WebKit):
+        if kind in (WebKit.PolicyDecisionType.NAVIGATION_ACTION, WebKit.PolicyDecisionType.NEW_WINDOW_ACTION):
+            uri = decision.get_navigation_action().get_request().get_uri() or ""
+            ok = uri == "about:blank" or (uri.startswith("file://") and
+                                          os.path.realpath(uri[7:].split("#")[0].split("?")[0]).startswith(VIEW_DIR))
+            if not ok:
+                log("blocked navigation", uri[:120])
+                decision.ignore()
+                return True
+        return False
+
+    def view_loaded(self, web, event, WebKit):
+        if event == WebKit.LoadEvent.FINISHED and (web.get_uri() or "").startswith("file://"):
+            self.view_ready = True
+            s = self.session
+            if s is not None: self.apply_state(s)
+
+    def view_message(self, manager, value):
+        try:
+            obj = json.loads(value.to_string())
+        except ValueError:
+            return
+        if isinstance(obj, dict): self.send(INPUT, obj)
+
+    def apply_state(self, s):
+        if s is not self.session: return False
+        self.show()
+        if HAS_VIEW and not self.view_ready: return False  # view_loaded calls again
+        with s.lock:
+            texts, s.state_pending = list(s.states), False
+            s.states.clear()
+        for text in texts:
+            if HAS_VIEW:
+                # text is re-serialized JSON, so it is a safe JavaScript literal
+                self.web.evaluate_javascript("window.armada && armada._state(%s)" % text, -1, None, None, None, None, None)
+            if DEBUG_DIR:
+                with open(os.path.join(DEBUG_DIR, "state.json"), "w") as f: f.write(text)
+                log_path = os.path.join(DEBUG_DIR, "states.jsonl")
+                big = os.path.exists(log_path) and os.path.getsize(log_path) > 4 << 20
+                with open(log_path, "w" if big else "a") as f: f.write(text + "\n")
+        return False
+
+    # Tell the provider the surface size in device pixels whenever it changes.
+    def push_config(self):
+        s = self.session
+        if s is None or not self.win.get_visible(): return True
+        gs = self.win.get_surface()
+        scale = gs.get_scale() if gs is not None and hasattr(gs, "get_scale") else self.surface.get_scale_factor()
+        size = (int(self.surface.get_width() * scale), int(self.surface.get_height() * scale))
+        # wait until the size has settled for one poll; the compositor resizes the window after mapping
+        settled, self.seen_size = size == self.seen_size, size
+        if settled and size != self.sent_size and size[0] > 0 and size[1] > 0:
+            self.sent_size = size
+            self.send(CONFIG, {"w": size[0], "h": size[1], "fps": 30})
+            log("config", *size)
+        return True
+
+    def present(self, s):
+        with s.lock:
+            if not s.dirty or s.fb is None: return False
+            s.dirty = False
+            (w, h), data = s.fb_size, GLib.Bytes.new(bytes(s.fb))
+        if s is not self.session: return False
+        self.surface.texture = Gdk.MemoryTexture.new(w, h, Gdk.MemoryFormat.R8G8B8A8, data, w * 4)
+        self.surface.queue_draw()
+        return False
+
+
+if __name__ == "__main__":
+    Host().run([])

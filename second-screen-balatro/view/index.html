@@ -1,0 +1,213 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  /* Sizes follow the panel: 1rem is about 37 device pixels on a 1240x1080 screen. */
+  html { font-size: 3.4vh; }
+  html, body { margin: 0; height: 100%; overflow: hidden; user-select: none; -webkit-user-select: none; }
+  ::-webkit-scrollbar { display: none; } * { scrollbar-width: none; }
+  body { background: #2c4a44 radial-gradient(ellipse at 30% 20%, #3f6b60 0%, #2c4a44 45%, #1d302e 100%); color: #fff;
+         font-family: "m6x11plus", "Noto Sans", sans-serif; display: flex; flex-direction: column; text-shadow: 0 .08rem 0 rgba(0,0,0,.45); }
+  .spr { background-repeat: no-repeat; image-rendering: pixelated; flex: none; position: relative; }
+  .card { aspect-ratio: 71 / 95; }
+  .spr > .spr { position: absolute; inset: 0; }
+  .box { background: #374244; border-radius: .45rem; box-shadow: 0 .16rem 0 #1e2b2d; }
+  .inset { background: #1e2b2d; border-radius: .35rem; }
+  .blue { color: #009dff; } .red { color: #fe5f55; } .gold { color: #f3b958; } .orange { color: #fda200; } .green { color: #4bc292; } .dim { color: #a9b8b6; }
+
+  #pages { flex: 1; min-height: 0; position: relative; }
+  .page { position: absolute; inset: 0; padding: .5rem .5rem .45rem; display: none; overflow-y: auto; box-sizing: border-box; }
+  .page.on { display: block; }
+
+  #tabs { display: flex; gap: .4rem; padding: 0 .5rem .45rem; }
+  .tab { flex: 1; text-align: center; font-size: 1.15rem; padding: .42rem 0 .5rem; border-radius: .45rem; background: #4f6367; box-shadow: 0 .18rem 0 #1e2b2d; }
+  .tab small { font-size: .7rem; color: rgba(255,255,255,.75); margin-left: .25rem; }
+  .tab.on { box-shadow: 0 .06rem 0 #1e2b2d; transform: translateY(.12rem); }
+  .tab[data-p=run].on { background: #fe5f55; } .tab[data-p=jokers].on { background: #009dff; }
+  .tab[data-p=deck].on { background: #fda200; } .tab[data-p=hands].on { background: #4bc292; }
+
+  /* run */
+  #p-run.on { display: flex; flex-direction: column; } #blinds { display: flex; gap: .4rem; flex: 1; min-height: 0; }
+  .bl { flex: 1; padding: .4rem; text-align: center; min-width: 0; border: .1rem solid transparent; display: flex; flex-direction: column; align-items: center; }
+  .bl.cur { border-color: #fda200; } .bl.done { opacity: .45; }
+  .bl .state { font-size: .8rem; padding: .08rem .5rem .14rem; border-radius: .3rem; background: #4f6367; margin-bottom: .25rem; }
+  .bl.cur .state { background: #fda200; }
+  .bl .spr.chip { width: 4.6rem; height: 4.6rem; margin: .5rem 0 .3rem; }
+  .bl .name { font-size: 1.2rem; line-height: 1.25rem; margin: .15rem 0; }
+  .bl .need { width: 100%; padding: .15rem 0 .25rem; margin-top: auto; }
+  .bl .need b { display: block; font-size: 1.7rem; font-weight: 400; color: #fe5f55; }
+  .bl .text { font-size: .82rem; line-height: .95rem; color: #e6ecea; min-height: 1.6rem; display: flex; align-items: center; }
+  .bl .tag { display: flex; align-items: center; gap: .25rem; font-size: .76rem; color: #a9b8b6; margin-top: .25rem; }
+  .bl .tag .spr { width: 1.3rem; height: 1.3rem; }
+  .cm { display: inline-block; min-width: 3.2rem; text-align: center; padding: .05rem .4rem .15rem; border-radius: .3rem; }
+  .cm.c { background: #009dff; } .cm.m { background: #fe5f55; }
+  #runrow { display: flex; gap: .4rem; margin-top: .45rem; align-items: stretch; }
+  #vouchers { flex: 1; padding: .35rem .5rem; display: flex; gap: .35rem; align-items: center; overflow: hidden; min-height: 3.6rem; }
+  #vouchers .spr { width: 2.3rem; }
+  #sorts { display: flex; gap: .4rem; }
+  .btn { background: #fda200; border-radius: .45rem; box-shadow: 0 .18rem 0 #1e2b2d; padding: .3rem .7rem .4rem; text-align: center; font-size: .95rem; display: flex; align-items: center; justify-content: center; line-height: 1rem; }
+  .btn:active { transform: translateY(.12rem); box-shadow: 0 .06rem 0 #1e2b2d; }
+  .btn.off { opacity: .3; }
+
+  /* jokers */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: .35rem; }
+  .jk { display: flex; gap: .4rem; padding: .28rem .3rem; min-width: 0; }
+  .jk > .spr { width: 3.45rem; align-self: center; }
+  .jk .r { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .jk .name { font-size: .95rem; line-height: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .desc { background: #fff; color: #4f6367; border-radius: .3rem; padding: .15rem .3rem .25rem; font-size: .72rem; line-height: .86rem; text-align: center; text-shadow: none; margin: .2rem 0; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  .desc i { font-style: normal; white-space: pre-wrap; } .desc i.b { border-radius: .15rem; padding: 0 .15rem .05rem; }
+  .badges { display: flex; gap: .2rem; flex-wrap: wrap; font-size: .62rem; }
+  .badge { padding: .02rem .35rem .1rem; border-radius: .25rem; background: #4f6367; }
+  .r1 { background: #009dff; } .r2 { background: #4bc292; } .r3 { background: #fe5f55; } .r4 { background: #b26cbb; }
+  .Tarot { background: #a782d1; } .Planet { background: #13afce; } .Spectral { background: #4584fa; }
+  .empty { color: #6d8582; font-size: .85rem; padding: .6rem; text-align: center; grid-column: 1 / 3; }
+  .ed::after { content: ""; position: absolute; inset: 0; border-radius: 6%; pointer-events: none; }
+  .ed.foil::after { background: linear-gradient(115deg, transparent 20%, rgba(170,200,255,.55) 45%, transparent 70%); background-size: 250% 100%; animation: sheen 3s linear infinite; }
+  .ed.holo::after { background: repeating-linear-gradient(0deg, rgba(255,80,120,.28) 0 6%, rgba(80,200,255,.28) 6% 12%); mix-blend-mode: screen; }
+  .ed.polychrome::after { background: linear-gradient(120deg, rgba(255,0,90,.4), rgba(255,220,0,.4), rgba(0,230,140,.4), rgba(0,140,255,.4), rgba(200,0,255,.4)); background-size: 300% 100%; animation: sheen 4s linear infinite; mix-blend-mode: hard-light; }
+  .ed.negative { filter: invert(1) hue-rotate(180deg); }
+  .soul { animation: float 2.4s ease-in-out infinite; }
+  @keyframes sheen { from { background-position: 150% 0; } to { background-position: -150% 0; } }
+  @keyframes float { 0%, 100% { transform: translateY(-2%) scale(1.03); } 50% { transform: translateY(2%) scale(.99); } }
+  .debuff { filter: grayscale(1) brightness(.6); }
+
+  /* deck */
+  #decksum { display: flex; gap: .4rem; margin-bottom: .4rem; }
+  #decksum .inset { flex: 1; text-align: center; padding: .15rem 0 .25rem; font-size: 1.15rem; }
+  #decksum span { display: block; font-size: .6rem; color: #a9b8b6; }
+  #p-deck.on { display: flex; flex-direction: column; } #suits { flex: 1; display: flex; flex-direction: column; gap: .3rem; }
+  .suit { display: flex; align-items: center; padding: .25rem .3rem; flex: 1; }
+  .suit .lab { width: 2.3rem; text-align: center; font-size: 1.3rem; line-height: 1.1rem; flex: none; }
+  .suit .lab small { display: block; font-size: .65rem; color: #a9b8b6; }
+  .suit .row { flex: 1; display: flex; min-width: 0; }
+  .suit .row .spr { flex: 0 1 2.35rem; min-width: 0; width: 2.35rem; }
+  .suit .spr.gone { filter: brightness(.3) saturate(.4); }
+  .Spades { color: #b9c3ff; } .Hearts { color: #fe5f55; } .Clubs { color: #6fd6a8; } .Diamonds { color: #fda200; }
+
+  /* hands */
+  .hand { display: flex; align-items: center; gap: .4rem; padding: .12rem .4rem .2rem; margin-bottom: .22rem; font-size: 1rem; }
+  .hand .lv { width: 3.3rem; text-align: center; font-size: .78rem; border-radius: .3rem; padding: .05rem 0 .15rem; color: #2a3a3c; text-shadow: none; background: #efefef; flex: none; }
+  .hand .n { flex: 1; }
+  .hand .x { color: #fe5f55; }
+  .hand .p { width: 3.4rem; text-align: right; color: #fda200; flex: none; }
+  .hand .p small { color: #a9b8b6; font-size: .6rem; margin-right: .2rem; }
+  .hand.zero .p { opacity: .5; }
+  #levels { display: flex; flex-direction: column; height: 100%; } #levels .hand { flex: 1 1 0; max-height: 2.4rem; }
+
+  #wait { position: fixed; inset: 0; display: flex; flex-direction: column; gap: .6rem; align-items: center; justify-content: center; background: inherit; font-size: 1.1rem; color: #cfdad8; }
+  #wait b { font-weight: 400; font-size: 3.4rem; letter-spacing: .2rem; color: #fff; text-shadow: 0 .22rem 0 #1e2b2d; background: #fe5f55; padding: .1rem 1.2rem .35rem; border-radius: .6rem; box-shadow: 0 .25rem 0 #1e2b2d; transform: rotate(-2deg); }
+</style>
+</head>
+<body>
+<div id="pages">
+  <div class="page on" id="p-run">
+    <div id="blinds"></div>
+    <div id="runrow"><div id="vouchers" class="box"></div>
+      <div id="sorts"><div class="btn" data-a="sort_value">Sort hand<br>by rank</div><div class="btn" data-a="sort_suit">Sort hand<br>by suit</div></div></div>
+  </div>
+  <div class="page" id="p-jokers"><div class="grid" id="jokers"></div></div>
+  <div class="page" id="p-deck"><div id="decksum"></div><div id="suits"></div></div>
+  <div class="page" id="p-hands"><div id="levels"></div></div>
+</div>
+<div id="tabs">
+  <div class="tab on" data-p="run">Run</div><div class="tab" data-p="jokers">Jokers<small id="tj"></small></div>
+  <div class="tab" data-p="deck">Deck<small id="td"></small></div><div class="tab" data-p="hands">Hands</div>
+</div>
+<div id="wait"><b>BALATRO</b><span id="waitline">Loading</span></div>
+<script>
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  // The art is the game's own, copied from the player's install into the mod's data folder at launch.
+  const ART = armada.data + "art/";
+  const ATLAS = { Joker: ["Jokers.png", 10, 16], Tarot: ["Tarots.png", 10, 6], Planet: ["Tarots.png", 10, 6], Spectral: ["Tarots.png", 10, 6],
+                  Voucher: ["Vouchers.png", 9, 4], cards: ["8BitDeck.png", 13, 4], centers: ["Enhancers.png", 7, 5],
+                  blind: ["BlindChips.png", 21, 31], tag: ["tags.png", 6, 5] };
+  const font = document.createElement("style");
+  font.textContent = `@font-face { font-family: "m6x11plus"; src: url("${ART}m6x11plus.ttf"); }`;
+  document.head.appendChild(font);
+  function bg(atlas, x, y) {
+    const [file, cols, rows] = ATLAS[atlas] || ATLAS.Joker;
+    return `background-image:url('${ART}${file}');background-size:${cols * 100}% ${rows * 100}%;background-position:${cols > 1 ? x / (cols - 1) * 100 : 0}% ${rows > 1 ? y / (rows - 1) * 100 : 0}%`;
+  }
+  const spr = (atlas, x, y, cls, inner) => `<div class="spr ${cls || ""}" style="${bg(atlas, x, y)}">${inner || ""}</div>`;
+  const SEALS = { Gold: [2, 0], Purple: [4, 4], Red: [5, 4], Blue: [6, 4] };
+  function fmt(n) {
+    n = Number(n) || 0;
+    if (n >= 1e11) return n.toExponential(3).replace("+", "");
+    return Math.round(n).toLocaleString("en-US");
+  }
+  const descHtml = d => (d || []).filter(l => l.length).map(l => "<div>" + l.map(r =>
+    `<i${r.bg ? ' class="b"' : ""} style="${r.c ? "color:" + r.c + ";" : ""}${r.bg ? "background:" + r.bg + ";" : ""}">${esc(r.t)}</i>`).join("") + "</div>").join("");
+
+  function held(c) {
+    const art = spr(c.set, c.x, c.y, "card ed " + c.edition + (c.debuff ? " debuff" : ""), c.soul ? spr(c.set, c.soul.x, c.soul.y, "soul") : "");
+    const badges = [c.set === "Joker" ? `<span class="badge r${c.rarity}">${["", "Common", "Uncommon", "Rare", "Legendary"][c.rarity] || ""}</span>`
+                                      : `<span class="badge ${c.set}">${esc(c.set)}</span>`];
+    if (c.edition) badges.push(`<span class="badge">${esc(c.edition[0].toUpperCase() + c.edition.slice(1))}</span>`);
+    if (c.sticker) badges.push(`<span class="badge">${esc(c.sticker)}</span>`);
+    if (c.debuff) badges.push('<span class="badge r3">Debuffed</span>');
+    badges.push(`<span class="gold" style="margin-left:auto">sells for $${c.sell}</span>`);
+    return `<div class="jk box">${art}<div class="r"><div class="name">${esc(c.name)}</div><div class="desc">${descHtml(c.desc)}</div><div class="badges">${badges.join("")}</div></div></div>`;
+  }
+  function playing(c) {
+    const stone = c.enh === "Stone Card";
+    let inner = stone ? "" : spr("cards", c.x, c.y);
+    if (c.seal && SEALS[c.seal]) inner += spr("centers", SEALS[c.seal][0], SEALS[c.seal][1]);
+    return spr("centers", c.bx, c.by, "card ed " + c.edition + (c.left ? "" : " gone"), inner);
+  }
+  const SUITS = [["Spades", "♠"], ["Hearts", "♥"], ["Clubs", "♣"], ["Diamonds", "♦"]];
+  const STATES = { Select: "Next", Current: "Now playing", Upcoming: "Upcoming", Defeated: "Defeated", Skipped: "Skipped" };
+
+  let keys = {};
+  function put(id, html) { if (keys[id] !== html) { keys[id] = html; $(id).innerHTML = html; } }
+  function render(s) {
+    $("wait").style.display = s.run ? "none" : "flex";
+    $("waitline").textContent = "Start or continue a run";
+    if (!s.run) return;
+    put("blinds", s.blinds.map(x => {
+      const cls = x.state === "Current" || x.state === "Select" ? "cur" : x.state === "Defeated" || x.state === "Skipped" ? "done" : "";
+      return `<div class="bl box ${cls}"><div class="state">${STATES[x.state] || esc(x.state)}</div>${spr("blind", 0, x.y, "chip")}
+        <div class="name"${x.colour ? ` style="color:${x.colour};filter:brightness(1.6)"` : ""}>${esc(x.name)}</div>
+        <div class="text">${esc(x.text || "")}</div>
+        <div class="need inset"><span class="dim" style="font-size:.6rem">SCORE AT LEAST</span><b>${fmt(x.chips)}</b><span class="gold">${"$".repeat(Math.min(x.dollars, 8))}</span></div>
+        ${x.tag ? `<div class="tag">${spr("tag", x.tag.x, x.tag.y)}<span>Skip: ${esc(x.tag.name)}</span></div>` : '<div class="tag">&nbsp;</div>'}</div>`;
+    }).join(""));
+    // sorting only means something while a hand is being picked
+    $("sorts").style.display = s.can_sort ? "" : "none";
+    put("vouchers", s.vouchers.length ? s.vouchers.map(v => `<div title="${esc(v.name)}" class="spr card" style="${bg("Voucher", v.x, v.y)}"></div>`).join("")
+                                       : '<span class="dim" style="font-size:.8rem">No vouchers redeemed</span>');
+    document.querySelectorAll(".btn").forEach(e => e.classList.toggle("off", !s.can_sort));
+
+    $("tj").textContent = s.jokers.length + "/" + s.jokers_max;
+    const all = s.jokers.concat(s.consumables);
+    put("jokers", all.length ? all.map(held).join("") : '<div class="empty">No jokers or consumables yet</div>');
+
+    const left = s.deck.filter(c => c.left);
+    $("td").textContent = left.length + "/" + s.deck.length;
+    const face = left.filter(c => c.id >= 11 && c.id <= 13 && c.enh !== "Stone Card").length, aces = left.filter(c => c.id === 14 && c.enh !== "Stone Card").length;
+    const special = left.filter(c => c.enh || c.seal || c.edition).length;
+    put("decksum", [["REMAINING", `${left.length}<small class="dim" style="font-size:.7rem"> / ${s.deck.length}</small>`], ["ACES", aces], ["FACE", face],
+      ["NUMBERED", left.length - face - aces - left.filter(c => c.enh === "Stone Card").length], ["MODIFIED", special]]
+      .map(([k, v]) => `<div class="inset"><span>${k}</span>${v}</div>`).join(""));
+    put("suits", SUITS.map(([suit, sym]) => {
+      const cs = s.deck.filter(c => c.suit === suit);
+      return `<div class="suit box"><div class="lab ${suit}">${sym}<small>${cs.filter(c => c.left).length}</small></div><div class="row">${cs.map(playing).join("")}</div></div>`;
+    }).join(""));
+
+    put("levels", s.levels.map(h => `<div class="hand box ${h.played ? "" : "zero"}"><span class="lv" style="background:${LV[Math.min(h.level, 7)]}">lvl.${h.level}</span><span class="n">${esc(h.name)}</span>
+      <span class="cm c">${fmt(h.chips)}</span><span class="x">X</span><span class="cm m">${fmt(h.mult)}</span><span class="p"><small>#</small>${h.played}</span></div>`).join(""));
+  }
+  const LV = ["#efefef", "#efefef", "#95acff", "#65efaf", "#fae37e", "#ffc052", "#f87d75", "#caa0ef"];
+
+  document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(o => o.classList.toggle("on", o === t));
+    document.querySelectorAll(".page").forEach(p => p.classList.toggle("on", p.id === "p-" + t.dataset.p));
+  }));
+  document.querySelectorAll(".btn").forEach(b => b.addEventListener("click", () => { if (!b.classList.contains("off")) armada.send({ action: b.dataset.a }); }));
+  armada.onState = render;
+  if (armada.last) render(armada.last);
+</script>
+</body>
+</html>

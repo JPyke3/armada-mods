@@ -1,0 +1,51 @@
+#!/usr/bin/python3
+"""Stand in for a game so an HTML view can be developed without launching it.
+
+  fake-provider <appid> [state.json ...]
+
+Run it on the device, with the mod's host already started by hand:
+
+  armada-run-bottom -- ~/.local/share/armada-mods/mods/<id>/host/screen-host
+
+It attaches as the provider, sends each state file in turn, then reads further
+states as JSON lines on stdin. Whatever the view passes to armada.send() is
+printed. Ctrl-C to stop.
+"""
+import json, os, socket, struct, sys, threading
+
+if len(sys.argv) < 2 or not sys.argv[1].isdigit():
+    sys.exit(__doc__)
+appid = sys.argv[1]
+
+def frame(typ, obj):
+    body = json.dumps(obj).encode()
+    return b"A2SS" + struct.pack("<HHII", typ, 0, len(body), 0) + body
+
+sock = socket.create_connection(("127.0.0.1", 47800))
+sock.sendall(frame(1, {"game": "fake", "appid": int(appid), "provider": "fake", "view": "html", "version": 1}))
+
+def reader():
+    buf = b""
+    while True:
+        data = sock.recv(65536)
+        if not data:
+            print("host closed the link", file=sys.stderr); os._exit(1)
+        buf += data
+        while len(buf) >= 16:
+            typ, _, ln, _ = struct.unpack("<HHII", buf[4:16])
+            if len(buf) < 16 + ln: break
+            body, buf = buf[16:16 + ln], buf[16 + ln:]
+            print(f"<- {typ}: {body.decode(errors='replace')}", flush=True)
+threading.Thread(target=reader, daemon=True).start()
+
+try:
+    for path in sys.argv[2:]:
+        sock.sendall(frame(3, json.load(open(path))))
+        print(f"-> {path}", flush=True)
+    for line in sys.stdin:
+        line = line.strip()
+        if not line: continue
+        try: sock.sendall(frame(3, json.loads(line)))
+        except ValueError as e: print(f"not JSON: {e}", file=sys.stderr)
+except KeyboardInterrupt:
+    pass

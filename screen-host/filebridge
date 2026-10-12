@@ -1,0 +1,54 @@
+#!/usr/bin/python3
+"""File link for providers that cannot open sockets (UE4SS Lua and similar).
+
+The provider writes hello.json once and state.json whenever its state changes
+into the link directory; this process relays them to the host and writes
+anything the view sends back to input.json. Runs until it is stopped.
+Usage: filebridge <link dir>
+"""
+import json, os, socket, struct, sys, time
+
+link = sys.argv[1]
+HELLO, STATE, INPUT = 1, 3, 16
+
+def read(name):
+    try:
+        with open(os.path.join(link, name)) as f: return f.read()
+    except OSError: return None
+
+def frame(typ, text):
+    body = text.encode()
+    return b"A2SS" + struct.pack("<HHII", typ, 0, len(body), 0) + body
+
+sock, sent, buf = None, None, b""
+while True:
+    time.sleep(0.1)
+    hello = read("hello.json")
+    if hello is None: continue
+    try:
+        if sock is None:
+            json.loads(hello)
+            sock = socket.create_connection(("127.0.0.1", 47800), timeout=1)
+            sock.sendall(frame(HELLO, hello)); sock.setblocking(False); sent = None; buf = b""
+        state = read("state.json")
+        if state and state != sent:
+            json.loads(state)
+            sock.setblocking(True); sock.sendall(frame(STATE, state)); sock.setblocking(False); sent = state
+        try:
+            data = sock.recv(65536)
+            if data == b"": raise ConnectionError
+            buf += data
+        except BlockingIOError: pass
+        while len(buf) >= 16:
+            typ, _, ln, _ = struct.unpack("<HHII", buf[4:16])
+            if len(buf) < 16 + ln: break
+            body, buf = buf[16:16 + ln], buf[16 + ln:]
+            if typ == INPUT:
+                tmp = os.path.join(link, "input.json.tmp")
+                with open(tmp, "wb") as f: f.write(body)
+                os.replace(tmp, os.path.join(link, "input.json"))
+    except ValueError:
+        pass  # caught a half-written file, retry next tick
+    except OSError:
+        if sock: sock.close()
+        sock = None; time.sleep(1)

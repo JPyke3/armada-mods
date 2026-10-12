@@ -1,0 +1,14 @@
+#!/usr/bin/python3
+# NW.js loads extra scripts named in package.json; write a patched copy into
+# this mod's overlay instead of touching the game's file.
+import json, os, sys
+game, upper = os.environ["ARMADA_MOD_GAME_DIR"], os.path.join(os.environ["ARMADA_MOD_DATA_DIR"], "overlay")
+os.makedirs(upper, exist_ok=True)
+p = json.load(open(f"{game}/package.json"))
+if p.get("inject_js_end") or p.get("inject_js_start"):
+    sys.exit("package.json already injects a script")
+p["inject_js_end"] = "armada-second-screen.js"
+tmp = f"{upper}/package.json.tmp"
+with open(tmp, "w") as f:
+    json.dump(p, f, indent=2)
+os.replace(tmp, f"{upper}/package.json")

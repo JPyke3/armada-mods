@@ -1,0 +1,31 @@
+#!/usr/bin/python3
+# Balatro is a LOVE executable with its Lua archive appended. Build a copy in
+# this mod's overlay whose archive also holds the provider, loaded from main.lua.
+# The view draws with the game's own art, copied out of the same archive into the data folder.
+import os, sys, zipfile, io
+game, upper = os.environ["ARMADA_MOD_GAME_DIR"], os.path.join(os.environ["ARMADA_MOD_DATA_DIR"], "overlay")
+os.makedirs(upper, exist_ok=True)
+here = os.environ["ARMADA_MOD_PACKAGE_DIR"]
+src, dst, mod = f"{game}/Balatro.exe", f"{upper}/Balatro.exe", f"{here}/payload/armada_second_screen.lua"
+ART = {"8BitDeck.png", "Enhancers.png", "Jokers.png", "Tarots.png", "Vouchers.png", "BlindChips.png", "tags.png",
+       "stickers.png", "chips.png", "m6x11plus.ttf"}
+art = os.path.join(os.environ["ARMADA_MOD_DATA_DIR"], "art")
+os.makedirs(art, exist_ok=True)
+data = open(src, "rb").read()
+zin = zipfile.ZipFile(io.BytesIO(data))
+stub = min(i.header_offset for i in zin.infolist())
+buf = io.BytesIO()
+with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED, compresslevel=1) as zout:
+    for item in zin.infolist():
+        body = zin.read(item.filename)
+        if item.filename == "main.lua":
+            body += b'\npcall(require, "armada_second_screen")\n'
+        zout.writestr(item, body)
+        if os.path.basename(item.filename) in ART and item.filename.startswith(("resources/textures/2x/", "resources/fonts/")):
+            with open(f"{art}/{os.path.basename(item.filename)}", "wb") as f:
+                f.write(body)
+    # by content: a packaged file can carry a date the archive format cannot hold
+    zout.writestr("armada_second_screen.lua", open(mod, "rb").read())
+with open(dst + ".tmp", "wb") as f:
+    f.write(data[:stub]); f.write(buf.getvalue())
+os.replace(dst + ".tmp", dst)

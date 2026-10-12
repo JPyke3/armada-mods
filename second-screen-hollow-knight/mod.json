@@ -1,0 +1,16 @@
+{
+  "id": "second-screen-hollow-knight",
+  "version": "0.1.0",
+  "name": "Hollow Knight: Companion",
+  "summary": "The live map, your charms and your inventory on the bottom screen, in the game's own art. Change charms by touch while resting at a bench.",
+  "tags": [
+    "dual-screen"
+  ],
+  "steam_appids": [
+    367520
+  ],
+  "hooks": {
+    "before_launch": "hooks/before_launch"
+  },
+  "second_screen": "host/screen-host"
+}

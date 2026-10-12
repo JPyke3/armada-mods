@@ -1,0 +1,16 @@
+{
+  "id": "second-screen-balatro",
+  "version": "0.1.0",
+  "name": "Balatro: Run Tracker",
+  "summary": "The run at a glance in the game's own art: the blinds ahead, jokers with their current values, the cards left in your deck and hand levels. Sort your hand by touch.",
+  "tags": [
+    "dual-screen"
+  ],
+  "steam_appids": [
+    2379780
+  ],
+  "hooks": {
+    "before_launch": "hooks/before_launch"
+  },
+  "second_screen": "host/screen-host"
+}

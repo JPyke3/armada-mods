@@ -1,0 +1,7 @@
+build/
+dist/
+cache/
+refs/
+obj/
+bin/
+__pycache__/

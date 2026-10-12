@@ -1,0 +1,16 @@
+{
+  "id": "second-screen-crosscode",
+  "version": "0.1.0",
+  "name": "CrossCode: Status and Quick Items",
+  "summary": "Lea's status, equipment and quests, element switching by touch, and consumables a tap and a confirm away.",
+  "tags": [
+    "dual-screen"
+  ],
+  "steam_appids": [
+    368340
+  ],
+  "hooks": {
+    "before_launch": "hooks/before_launch"
+  },
+  "second_screen": "host/screen-host"
+}

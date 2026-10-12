@@ -1,0 +1,12 @@
+#!/usr/bin/python3
+# Unity Mono: write a patched copy of UnityEngine.CoreModule.dll into this mod's overlay so
+# the game loads ArmadaSecondScreenBoot from its Managed folder. The install is not modified.
+import glob, os, subprocess
+
+game, overlay = os.environ["ARMADA_MOD_GAME_DIR"], os.path.join(os.environ["ARMADA_MOD_DATA_DIR"], "overlay")
+tool = os.path.join(os.environ["ARMADA_MOD_PACKAGE_DIR"], "tools", "interopgen", "interopgen")
+src = glob.glob(os.path.join(glob.escape(game), "*_Data", "Managed", "UnityEngine.CoreModule.dll"))[0]
+dst = os.path.join(overlay, os.path.relpath(src, game))
+os.makedirs(os.path.dirname(dst), exist_ok=True)
+subprocess.run([tool, "monoinject", src, dst + ".tmp"], check=True)
+os.replace(dst + ".tmp", dst)

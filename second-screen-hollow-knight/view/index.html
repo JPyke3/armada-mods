@@ -1,0 +1,213 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  /* Sizes follow the panel: 1rem is about 37 device pixels on a 1240x1080 screen. */
+  html { font-size: 3.4vh; }
+  html, body { margin: 0; height: 100%; overflow: hidden; user-select: none; -webkit-user-select: none; background: transparent; }
+  ::-webkit-scrollbar { display: none; } * { scrollbar-width: none; box-sizing: border-box; }
+  body { color: #e9edf2; font: 400 .8rem "Cantarell", "Noto Sans", sans-serif; display: flex; flex-direction: column; text-shadow: 0 .05rem .15rem #000; }
+  .caps { text-transform: uppercase; letter-spacing: .16rem; }
+  .dim { color: #8c97a6; }
+
+  #pages { flex: 1; min-height: 0; position: relative; }
+  .page { position: absolute; inset: 0; display: none; }
+  .page.on { display: flex; flex-direction: column; }
+  .solid { background: radial-gradient(ellipse at 50% 0%, #1b2130 0%, #0b0d14 60%, #06070b 100%); padding: .5rem .7rem .3rem; }
+
+  #tabs { display: flex; background: linear-gradient(0deg, rgba(4,5,10,.97) 60%, rgba(4,5,10,0)); padding: .5rem .7rem .5rem; gap: .5rem; }
+  .tab { flex: 1; text-align: center; padding: .4rem 0 .45rem; font-size: 1rem; color: #8c97a6; border-top: .06rem solid #39414f; position: relative; }
+  .tab.on { color: #fff; border-top-color: #e9edf2; }
+  .tab.on::before { content: ""; position: absolute; left: 50%; top: -.26rem; width: .45rem; height: .45rem; background: #e9edf2; transform: translateX(-50%) rotate(45deg); }
+
+  /* map */
+  #p-map { touch-action: none; }
+  #zone { position: absolute; left: .8rem; top: .55rem; font-size: .72rem; color: #b9c2ce; }
+  #maphint { margin: auto; font-size: 1.05rem; color: #b9c2ce; text-align: center; padding: 0 2rem; }
+  #world { position: absolute; right: .7rem; bottom: .2rem; padding: .35rem .8rem; font-size: .7rem; border: .06rem solid #8c97a6; background: rgba(4,5,10,.75); border-radius: 2rem; }
+
+  /* charms */
+  #notchrow { display: flex; align-items: center; gap: .6rem; padding: .1rem .2rem .35rem; }
+  #notches { display: flex; gap: .22rem; }
+  #notches i { width: .8rem; height: .8rem; border-radius: 50%; border: .08rem solid #cfd6df; }
+  #notches i.f { background: #e9edf2; } #notches i.o { background: #c552d6; border-color: #e7a3f0; box-shadow: 0 0 .4rem #c552d6; }
+  #over { color: #e7a3f0; font-size: .7rem; } #benchhint { margin-left: auto; font-size: .66rem; color: #8c97a6; text-align: right; }
+  h3 { font-size: .62rem; font-weight: 400; color: #8c97a6; margin: .1rem .2rem .1rem; display: flex; justify-content: space-between; }
+  #worn { display: flex; gap: .3rem; min-height: 3.9rem; align-items: center; padding: 0 .2rem .2rem; border-bottom: .06rem solid #39414f; margin-bottom: .3rem; }
+  #worn .charm { width: 3.6rem; height: 3.6rem; flex: none; }
+  #grid { display: grid; grid-template-columns: repeat(var(--cols), 1fr); grid-auto-rows: minmax(0, var(--row)); gap: .2rem; flex: 1; min-height: 0; overflow-y: auto; align-content: start; }
+  .charm { display: flex; align-items: center; justify-content: center; border-radius: .5rem; position: relative; min-height: 0; }
+  .charm img { max-width: 82%; max-height: 88%; filter: drop-shadow(0 .1rem .2rem #000); }
+  #grid .charm.on img { opacity: .3; }
+  .charm.sel { box-shadow: inset 0 0 0 .08rem #e9edf2; background: rgba(255,255,255,.08); }
+  .charm.broken img { filter: grayscale(1) brightness(.5); }
+  .detail { display: flex; gap: .7rem; align-items: center; border-top: .06rem solid #39414f; padding: .4rem .2rem 0; margin-top: .3rem; min-height: 5.2rem; }
+  .detail img { width: 3.6rem; flex: none; }
+  .detail .t { flex: 1; min-width: 0; }
+  .detail .n { font-size: 1.05rem; display: flex; align-items: center; gap: .5rem; }
+  .detail .d { font-size: .68rem; line-height: .86rem; color: #c3cbd6; margin-top: .15rem; }
+  .cost { display: inline-flex; gap: .14rem; } .cost i { width: .5rem; height: .5rem; border-radius: 50%; background: #e9edf2; }
+  .state { font-size: .6rem; padding: .1rem .5rem; border: .06rem solid #8c97a6; border-radius: 2rem; }
+
+  /* inventory */
+  #invcols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .6rem; flex: 1; min-height: 0; }
+  .col { min-height: 0; overflow-y: auto; }
+  h2 { font-size: .62rem; font-weight: 400; color: #8c97a6; margin: .25rem 0 .2rem; padding-bottom: .15rem; border-bottom: .05rem solid #39414f; }
+  .ent { display: flex; align-items: center; gap: .4rem; padding: .2rem .4rem; margin-bottom: .1rem; border-radius: .3rem; font-size: .84rem; line-height: 1rem; background: rgba(255,255,255,.04); }
+  .ent img, .ent i { width: 1.5rem; height: 1.5rem; object-fit: contain; flex: none; } #idetail img { width: 3rem; height: 3rem; object-fit: contain; } #idetail i { display: none; }
+  .ent .c { margin-left: auto; color: #b9c2ce; }
+  .ent.sel { background: rgba(255,255,255,.2); box-shadow: inset .12rem 0 0 #e9edf2; }
+  .none { color: #5a6474; font-size: .76rem; padding: .2rem .3rem; }
+  #progress { display: grid; grid-template-columns: repeat(6, 1fr); gap: .3rem; padding: .35rem 0 0; border-top: .06rem solid #39414f; margin-top: .25rem; }
+  .pg { text-align: center; } .pg b { display: block; font-size: 1.15rem; font-weight: 400; } .pg span { font-size: .52rem; color: #8c97a6; }
+  .pips { display: flex; gap: .15rem; justify-content: center; height: 1.5rem; align-items: center; } .pips i { width: .6rem; height: .75rem; border-radius: 45%; border: .07rem solid #cfd6df; } .pips i.f { background: #e9edf2; }
+
+  #wait { position: fixed; inset: 0; display: flex; flex-direction: column; gap: .7rem; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 40%, #1b2130 0%, #0b0d14 55%, #06070b 100%); color: #8c97a6; font-size: .9rem; }
+  #wait b { font-weight: 400; font-size: 1.7rem; color: #e9edf2; letter-spacing: .3rem; }
+  #wait i { width: 9rem; height: .06rem; background: linear-gradient(90deg, transparent, #8c97a6, transparent); position: relative; }
+  #wait i::after { content: ""; position: absolute; left: 50%; top: -.2rem; width: .4rem; height: .4rem; background: #e9edf2; transform: translateX(-50%) rotate(45deg); }
+</style>
+</head>
+<body>
+<div id="pages">
+  <div class="page on" id="p-map"><div id="zone" class="caps"></div><div id="maphint"></div><div id="world" class="caps"></div></div>
+  <div class="page solid" id="p-charms">
+    <div id="notchrow"><span class="caps dim" style="font-size:.62rem">Notches</span><div id="notches"></div><span id="over" class="caps"></span><span id="benchhint"></span></div>
+    <h3 class="caps"><span>Equipped</span></h3><div id="worn"></div>
+    <h3 class="caps"><span>Collection</span><span id="found"></span></h3><div id="grid"></div>
+    <div class="detail" id="cdetail"></div>
+  </div>
+  <div class="page solid" id="p-inv">
+    <div id="invcols">
+      <div class="col"><h2 class="caps">Nail and spells</h2><div id="spells"></div></div>
+      <div class="col"><h2 class="caps">Abilities</h2><div id="abilities"></div></div>
+      <div class="col"><h2 class="caps">Items</h2><div id="items"></div></div>
+    </div>
+    <div class="detail" id="idetail" style="min-height:3.6rem"></div>
+    <div id="progress"></div>
+  </div>
+</div>
+<div id="tabs"><div class="tab on caps" data-p="map">Map</div><div class="tab caps" data-p="charms">Charms</div><div class="tab caps" data-p="inv">Inventory</div></div>
+<div id="wait"><b class="caps">Hollow Knight</b><i></i><span id="waitline">Loading</span></div>
+<script>
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  // Charm art arrives as images read from the running game, never shipped with the mod.
+  const art = {}, keys = {};
+  function put(id, html) { if (keys[id] !== html) { keys[id] = html; $(id).innerHTML = html; } }
+  let state = null, greeted = false, tab = "map", selCharm = 0, selItem = "";
+  const clock = t => Math.floor(t / 3600) + "h " + String(Math.floor(t / 60) % 60).padStart(2, "0") + "m";
+  const pips = (n, of) => '<div class="pips">' + Array.from({ length: of }, (_, i) => `<i class="${i < n ? "f" : ""}"></i>`).join("") + "</div>";
+
+  function render(s) {
+    if (s.assets) { Object.assign(art, s.assets); if (state) render(state); return; }
+    state = s;
+    // the page is up before the game is; the first state means a provider is there to hear the setup
+    if (!greeted) { greeted = true; armada.send({ action: "assets" }); insets(); armada.send({ action: "tab", name: tab }); }
+    // no charms in the state means the title screen or a menu
+    const ready = s.charms !== undefined;
+    $("wait").style.display = ready ? "none" : "flex";
+    $("waitline").textContent = "Start or load a game";
+    if (!ready) return;
+    $("zone").textContent = s.world ? "" : s.zone;
+    $("maphint").textContent = s.map ? "" : s.status === "no-map" ? "No map for this area yet" : s.status === "unmapped-zone" ? "This place is on no map" : "";
+    $("world").textContent = s.world ? "Area map" : "World map"; $("world").style.display = s.map ? "" : "none";
+
+    put("notches", Array.from({ length: Math.max(s.notches, s.used) }, (_, i) => `<i class="${i >= s.notches ? "o" : i < s.used ? "f" : ""}"></i>`).join(""));
+    $("over").textContent = s.over ? "Overcharmed" : "";
+    const can = s.bench && !s.charmScreen;
+    $("benchhint").textContent = can ? "Resting at a bench: tap a charm to equip or remove it" : s.bench ? "Close the game's charm screen to change charms here" : "Rest at a bench to change charms";
+    const owned = {}; s.charms.forEach(c => owned[c.id] = c);
+    const charm = c => `<div class="charm ${c.on ? "on" : ""} ${c.broken ? "broken" : ""} ${selCharm === c.id ? "sel" : ""}" data-id="${c.id}">${art["c" + c.id] ? `<img src="${art["c" + c.id]}">` : ""}</div>`;
+    const worn = s.charms.filter(c => c.on);
+    put("worn", worn.length ? worn.map(charm).join("") : '<span class="dim" style="font-size:.76rem">No charms equipped</span>');
+    // few charms are drawn large, a full collection in eight columns
+    const cols = s.charms.length <= 10 ? 5 : s.charms.length <= 21 ? 7 : 8;
+    $("grid").style.setProperty("--cols", cols); $("grid").style.setProperty("--row", cols === 5 ? "4.4rem" : cols === 7 ? "3.4rem" : "2.75rem");
+    put("grid", s.charms.map(charm).join(""));
+    $("found").textContent = s.charms.length + " of 40 found";
+    const c = owned[selCharm] || s.charms.find(x => x.on) || s.charms[0];
+    put("cdetail", c ? `${art["c" + c.id] ? `<img src="${art["c" + c.id]}">` : ""}<div class="t"><div class="n"><span>${esc(c.name)}</span><span class="cost">${"<i></i>".repeat(c.cost)}</span>
+      <span class="state caps">${c.broken ? "Broken" : c.on ? "Equipped" : "Not equipped"}</span></div><div class="d">${esc(c.desc)}</div></div>` : '<div class="dim">No charms yet</div>');
+
+    const pic = e => art["i:" + e.icon] ? `<img src="${art["i:" + e.icon]}">` : "<i></i>";
+    const list = (items, pre) => items.length ? items.map((e, i) => `<div class="ent ${selItem === pre + i ? "sel" : ""}" data-k="${pre + i}">${pic(e)}<span>${esc(e.name)}</span>${e.count ? `<span class="c">x${e.count}</span>` : ""}</div>`).join("") : '<div class="none">Nothing yet</div>';
+    const nail = { name: s.nail.name, desc: s.nail.desc, icon: "NAIL" };
+    const groups = { s: [nail].concat(s.spells), a: s.abilities, i: s.items };
+    put("spells", list(groups.s, "s")); put("abilities", list(groups.a, "a")); put("items", list(groups.i, "i"));
+    const picked = selItem ? groups[selItem[0]][Number(selItem.slice(1))] : null;
+    put("idetail", picked ? `${pic(picked)}<div class="t"><div class="n">${esc(picked.name)}</div><div class="d">${esc(picked.desc)}</div></div>`
+                          : '<div class="t dim" style="font-size:.7rem">Tap an entry to read about it</div>');
+    const p = s.progress;
+    put("progress", [[s.nail.damage, "NAIL DAMAGE"], [p.essence < 0 ? "-" : p.essence.toLocaleString("en-US"), "ESSENCE"], [p.grubs + "<small class='dim'>/46</small>", "GRUBS FREED"]]
+      .map(([v, k]) => `<div class="pg"><b>${v}</b><span>${k}</span></div>`).join("") +
+      `<div class="pg">${pips(p.shards, 4)}<span>MASK SHARDS</span></div><div class="pg">${pips(p.fragments, 3)}<span>VESSEL FRAGMENTS</span></div>` +
+      `<div class="pg"><b>${p.completion}%</b><span>${clock(p.time)}</span></div>`);
+  }
+
+  function show(name) {
+    tab = name;
+    document.querySelectorAll(".tab").forEach(o => o.classList.toggle("on", o.dataset.p === name));
+    document.querySelectorAll(".page").forEach(p => p.classList.toggle("on", p.id === "p-" + name));
+    // the map is only rendered and streamed while it can be seen
+    armada.send({ action: "tab", name: name });
+    try { sessionStorage.setItem("tab", name); } catch (e) {}
+  }
+  document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => show(t.dataset.p)));
+  $("p-charms").addEventListener("click", e => {
+    const el = e.target.closest(".charm[data-id]");
+    if (!el) return;
+    selCharm = Number(el.dataset.id);
+    // equipping is undone with another tap, so it needs no confirmation
+    if (state.bench && !state.charmScreen) armada.send({ action: "charm", id: selCharm });
+    render(state);
+  });
+  $("invcols").addEventListener("click", e => {
+    const el = e.target.closest(".ent");
+    selItem = el ? el.dataset.k : "";
+    render(state);
+  });
+
+  // Map touches go to the provider as the surface gestures it already understands.
+  const map = $("p-map"), pts = new Map();
+  let pinch = 0, lastMove = 0;
+  const at = e => ({ x: +(e.clientX / innerWidth).toFixed(4), y: +(e.clientY / innerHeight).toFixed(4) });
+  const spread = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1; };
+  $("world").addEventListener("pointerdown", e => e.stopPropagation());
+  $("world").addEventListener("click", () => armada.send({ action: "world" }));
+  map.addEventListener("pointerdown", e => {
+    pts.set(e.pointerId, e);
+    try { map.setPointerCapture(e.pointerId); } catch (err) {}
+    if (pts.size === 1) armada.send(Object.assign({ t: "down" }, at(e)));
+    else if (pts.size === 2) pinch = spread();
+  });
+  map.addEventListener("pointermove", e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, e);
+    const now = performance.now();
+    if (now - lastMove < 16) return;
+    lastMove = now;
+    if (pts.size === 1) armada.send(Object.assign({ t: "move" }, at(e)));
+    else if (pts.size === 2) armada.send({ t: "zoom", s: +(spread() / pinch).toFixed(4) });
+  });
+  const lift = e => {
+    if (!pts.has(e.pointerId)) return;
+    if (pts.size === 2) armada.send({ t: "zoomend" });
+    else if (pts.size === 1 && !pinch) armada.send(Object.assign({ t: "up" }, at(e)));
+    pts.delete(e.pointerId);
+    if (!pts.size) pinch = 0;
+  };
+  map.addEventListener("pointerup", lift); map.addEventListener("pointercancel", lift);
+
+  // Tell the provider how much of the surface the tab bar covers, so the map is framed above it.
+  function insets() { armada.send({ action: "insets", top: .04, bottom: +($("tabs").offsetHeight * .8 / innerHeight).toFixed(3) }); }
+  addEventListener("resize", insets);
+  armada.onState = render;
+  let start = "map";
+  try { if ($("p-" + sessionStorage.getItem("tab"))) start = sessionStorage.getItem("tab"); } catch (e) {}
+  show(start);
+  if (armada.last) render(armada.last);
+</script>
+</body>
+</html>

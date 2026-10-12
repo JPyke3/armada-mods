@@ -1,0 +1,255 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  /* Sizes follow the panel: 1rem is about 37 device pixels on a 1240x1080 screen. */
+  html { font-size: 3.4vh; }
+  html, body { margin: 0; height: 100%; overflow: hidden; user-select: none; -webkit-user-select: none; }
+  ::-webkit-scrollbar { display: none; } * { scrollbar-width: none; box-sizing: border-box; }
+  body { --el: #9fd0ff; --el2: #2f6fd0; background: #070b1a; color: #eaf2ff; font: 600 .82rem "Noto Sans", sans-serif; display: flex; flex-direction: column;
+         background-image: linear-gradient(rgba(120,170,255,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(120,170,255,.045) 1px, transparent 1px), radial-gradient(ellipse at 20% 0%, color-mix(in srgb, var(--el2) 38%, #070b1a) 0%, #070b1a 62%);
+         background-size: 1.2rem 1.2rem, 1.2rem 1.2rem, 100% 100%; transition: --el .3s; }
+  body.e1 { --el: #ff8a4a; --el2: #d6401c; } body.e2 { --el: #6fd6ff; --el2: #1f86d6; } body.e3 { --el: #c79bff; --el2: #7d3fe0; } body.e4 { --el: #6ff0a0; --el2: #1f9f5a; }
+  img.px { image-rendering: pixelated; display: block; }
+  .num { font-family: "Hack", "Noto Sans Mono", monospace; font-weight: 700; }
+  .dim { color: #8fa6d4; }
+  .cut { clip-path: polygon(.55rem 0, 100% 0, 100% calc(100% - .55rem), calc(100% - .55rem) 100%, 0 100%, 0 .55rem); }
+  .panel { background: linear-gradient(160deg, rgba(34,52,104,.92), rgba(14,22,48,.95)); border-left: .14rem solid var(--el); padding: .4rem .55rem; position: relative; }
+  h2 { margin: 0 0 .25rem; font-size: .62rem; letter-spacing: .14rem; text-transform: uppercase; color: var(--el); font-weight: 700; }
+
+  #head { display: flex; gap: .5rem; align-items: stretch; }
+  #face { width: 4.6rem; flex: none; background: linear-gradient(180deg, color-mix(in srgb, var(--el2) 70%, #0b1228), #0b1228); border-bottom: .14rem solid var(--el); overflow: hidden; display: flex; align-items: flex-end; justify-content: center; }
+  #face img { width: 4.5rem; margin-bottom: -.95rem; }
+  #vit { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; padding: .35rem .6rem .4rem; }
+  #who { display: flex; align-items: baseline; gap: .5rem; }
+  #name { font-size: 1.25rem; font-weight: 800; letter-spacing: .03rem; } #lvl { color: var(--el); font-size: .95rem; }
+  #credit { margin-left: auto; color: #ffd66b; font-size: .95rem; }
+  .barrow { display: flex; align-items: center; gap: .4rem; }
+  .barrow .k { width: 1.7rem; font-size: .68rem; color: var(--el); letter-spacing: .06rem; }
+  .barrow .v { width: 6.4rem; text-align: right; font-size: .82rem; }
+  .bar { flex: 1; height: .82rem; background: #050814; transform: skewX(-24deg); overflow: hidden; border: 1px solid rgba(140,180,255,.35); }
+  .bar > div { height: 100%; transition: width .2s; }
+  #hp { background: linear-gradient(#7dff8f, #23b14a); } #hp.mid { background: linear-gradient(#ffe26b, #e0a020); } #hp.low { background: linear-gradient(#ff7a6a, #d92f2f); }
+  #exp { background: linear-gradient(#b9a2ff, #6a4fe0); } .bar.thin { height: .42rem; }
+  #sp { flex: 1; display: flex; gap: .2rem; transform: skewX(-24deg); }
+  #sp i { flex: 1; max-width: 2.2rem; height: .62rem; background: #050814; border: 1px solid rgba(140,180,255,.35); position: relative; overflow: hidden; }
+  #sp i b { position: absolute; inset: 0; background: linear-gradient(#8fe6ff, #2f9fe0); transform-origin: left; }
+  #elems { display: grid; grid-template-columns: repeat(3, 2.25rem); grid-template-rows: repeat(3, 1.52rem); gap: .12rem; align-content: center; flex: none; }
+  .el { display: flex; align-items: center; justify-content: center; background: rgba(20,32,70,.9); border: .1rem solid rgba(140,180,255,.3); }
+  .el img { width: 1.25rem; } .el.off { opacity: .22; }
+  .el.on { background: var(--el2); border-color: var(--el); box-shadow: 0 0 .6rem var(--el); }
+  .el[data-m="0"] { grid-area: 2 / 2; } .el[data-m="1"] { grid-area: 1 / 2; } .el[data-m="2"] { grid-area: 3 / 2; } .el[data-m="3"] { grid-area: 2 / 3; } .el[data-m="4"] { grid-area: 2 / 1; }
+
+  #where { display: flex; gap: .6rem; padding: .25rem .2rem .3rem; font-size: .7rem; color: #8fa6d4; align-items: baseline; }
+  #area { color: #eaf2ff; font-size: .8rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #pages { flex: 1; min-height: 0; position: relative; }
+  .page { position: absolute; inset: 0; padding: .45rem .5rem .35rem; display: none; overflow-y: auto; }
+  .page.on { display: block; }
+
+  #tabs { display: flex; gap: .35rem; padding: 0 .5rem .45rem; }
+  .tab { flex: 1; text-align: center; padding: .42rem 0; font-size: 1rem; font-weight: 800; letter-spacing: .12rem; text-transform: uppercase; color: #8fa6d4; background: rgba(20,32,70,.9); border-bottom: .14rem solid rgba(140,180,255,.3); }
+  .tab.on { color: #fff; background: linear-gradient(180deg, color-mix(in srgb, var(--el2) 75%, #0b1228), #0b1228); border-bottom-color: var(--el); }
+  .tab small { font-size: .7rem; color: var(--el); margin-left: .3rem; letter-spacing: 0; }
+
+  /* items */
+  #items { display: grid; grid-template-columns: 1fr 1fr; gap: .35rem; }
+  .item { display: flex; align-items: center; gap: .5rem; padding: .3rem .55rem; min-height: 2.7rem; background: linear-gradient(160deg, rgba(38,58,116,.95), rgba(16,26,58,.95)); border-left: .14rem solid var(--el); }
+  .item img { width: 1.9rem; flex: none; }
+  .item .t { flex: 1; min-width: 0; } .item .n { font-size: 1.02rem; line-height: 1.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .c { font-size: 1.25rem; color: #ffd66b; }
+  .item .c small { font-size: .7rem; color: #8fa6d4; }
+  .item.sel, .item.flash { background: var(--el2); box-shadow: inset 0 0 0 .1rem var(--el); }
+  .item.off { opacity: .4; }
+  .item.ok { background: #1f9f5a; } .item.no { background: #9f2f3a; }
+  #p-items.on { display: flex; flex-direction: column; } #items { flex: 1; min-height: 0; overflow-y: auto; align-content: start; }
+  #confirm { display: none; align-items: center; gap: .6rem; margin-top: .35rem; padding: .45rem .5rem .45rem .7rem; background: linear-gradient(160deg, color-mix(in srgb, var(--el2) 60%, #101a3a), #101a3a); border-left: .14rem solid var(--el); }
+  #confirm.on { display: flex; }
+  #confirm img { width: 2.3rem; flex: none; } #confirm .t { flex: 1; min-width: 0; } #confirm .n { font-size: 1rem; } #confirm .d { font-size: .68rem; line-height: .82rem; font-weight: 500; color: #d5e2ff; }
+  #use { flex: none; padding: .65rem 1.3rem; font-size: 1.15rem; font-weight: 800; letter-spacing: .14rem; color: #06101f; background: #ffd66b; }
+  #use:active { background: #fff; }
+  #cool { display: none; text-align: center; color: #ffd66b; font-size: .7rem; letter-spacing: .1rem; padding-bottom: .25rem; }
+  .none { color: #8fa6d4; text-align: center; padding: 1.4rem 0; font-weight: 500; grid-column: 1 / 3; }
+
+  /* status */
+  #stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: .35rem; margin-bottom: .35rem; }
+  .stat { display: flex; align-items: center; gap: .35rem; padding: .3rem .45rem; }
+  .stat img { width: 1.25rem; } .stat .k { font-size: .56rem; color: #8fa6d4; letter-spacing: .08rem; line-height: .6rem; } .stat .v { font-size: 1.05rem; line-height: 1.1rem; }
+  #cols { display: grid; grid-template-columns: 1.25fr 1fr; gap: .35rem; }
+  .eq { display: flex; align-items: center; gap: .4rem; padding: .16rem 0; border-bottom: 1px solid rgba(140,180,255,.14); }
+  .eq:last-child { border: 0; }
+  .eq img { width: 1.15rem; flex: none; } .eq .s { width: 3.9rem; font-size: .62rem; color: #b9c9ee; letter-spacing: .05rem; text-transform: uppercase; flex: none; }
+  .eq .n { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: .95rem; } .eq .l { color: var(--el); font-size: .7rem; }
+  .eq small { display: block; font: 700 .6rem "Hack", monospace; color: #b9c9ee; white-space: pre; line-height: .72rem; }
+  .res { display: flex; align-items: center; gap: .4rem; padding: .14rem 0; }
+  .res img { width: 1.1rem; } .res .bar { height: .5rem; } .res .v { width: 2.6rem; text-align: right; font-size: .75rem; }
+  .res .bar > div { background: var(--c); position: absolute; top: 0; bottom: 0; } .res .bar { position: relative; }
+  .res .bar::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,.6); }
+  .mate { padding: .14rem 0; } .mate .bar { height: .5rem; margin-top: .1rem; transform: skewX(-24deg); } .mate .bar > div { background: linear-gradient(#7dff8f, #23b14a); }
+  #buffs { display: flex; gap: .3rem; flex-wrap: wrap; min-height: 1.3rem; }
+  .buff { display: flex; align-items: center; gap: .1rem; padding: .12rem .3rem; background: #050814; border: 1px solid rgba(140,180,255,.35); position: relative; }
+  .buff img { width: .9rem; } .buff u { position: absolute; left: 0; bottom: 0; height: .1rem; background: var(--el); }
+  .stack { display: flex; flex-direction: column; gap: .35rem; }
+
+  /* quests */
+  .quest { margin-bottom: .35rem; padding: .4rem .6rem .45rem; }
+  .quest .top { display: flex; align-items: baseline; gap: .5rem; }
+  .quest .n { font-size: 1rem; flex: 1; } .quest .lv { color: var(--el); font-size: .7rem; } .quest .st { color: #8fa6d4; font-size: .62rem; letter-spacing: .08rem; }
+  .quest .task { color: #ffd66b; font-size: .78rem; margin-top: .1rem; }
+  .quest .d { color: #8fa6d4; font-size: .62rem; line-height: .76rem; font-weight: 500; margin-top: .12rem; }
+  .sub { display: flex; align-items: center; gap: .4rem; margin-top: .22rem; font-size: .72rem; }
+  .sub .box { width: .7rem; height: .7rem; border: .09rem solid var(--el); flex: none; transform: rotate(45deg) scale(.8); } .sub.done .box { background: var(--el); } .sub.done { color: #8fa6d4; }
+  .sub .bar { height: .5rem; max-width: 9rem; } .sub .bar > div { background: var(--el); }
+
+  #wait { position: fixed; inset: 0; display: flex; flex-direction: column; gap: .5rem; align-items: center; justify-content: center; background: inherit; font-size: .95rem; color: #8fa6d4; letter-spacing: .08rem; }
+  #wait b { font-size: 2.2rem; font-weight: 800; letter-spacing: .5rem; color: #eaf2ff; padding: .2rem 1.4rem .3rem 1.9rem; border-left: .14rem solid var(--el); border-right: .14rem solid var(--el); text-shadow: 0 0 1rem var(--el2); }
+</style>
+</head>
+<body>
+<div id="pages">
+  <div class="page" id="p-items"><div id="cool">ITEMS ON COOLDOWN</div><div id="items"></div>
+    <div id="confirm" class="cut"><img class="px" id="cimg"><div class="t"><div class="n" id="cname"></div><div class="d" id="cdesc"></div></div><div id="use" class="cut">USE</div></div></div>
+  <div class="page on" id="p-status">
+    <div id="head">
+      <div id="face" class="cut"><img class="px" id="faceimg"></div>
+      <div id="vit" class="panel cut">
+        <div id="who"><span id="name"></span><span id="lvl" class="num"></span><span id="credit" class="num"></span></div>
+        <div class="barrow"><span class="k">HP</span><div class="bar"><div id="hp"></div></div><span class="v num" id="hpt"></span></div>
+        <div class="barrow" id="sprow"><span class="k">SP</span><div id="sp"></div><span class="v num" id="spt"></span></div>
+        <div class="barrow"><span class="k">EXP</span><div class="bar thin"><div id="exp"></div></div><span class="v num dim" id="expt"></span></div>
+      </div>
+      <div id="elems"></div>
+    </div>
+    <div id="where"><span id="area"></span><span id="chests"></span><span id="time" class="num"></span></div>
+    <div id="stats"></div>
+    <div id="cols">
+      <div class="stack"><div class="panel cut"><h2>Equipment</h2><div id="equip"></div></div><div class="panel cut"><h2>Active buffs</h2><div id="buffs"></div></div></div>
+      <div class="stack"><div class="panel cut"><h2>Resistance</h2><div id="res"></div></div><div class="panel cut" id="partybox"><h2>Party</h2><div id="party"></div></div></div>
+    </div>
+  </div>
+  <div class="page" id="p-quests"><div id="quests"></div></div>
+</div>
+<div id="tabs">
+  <div class="tab on cut" data-p="status">Status</div><div class="tab cut" data-p="items">Items<small id="ti"></small></div><div class="tab cut" data-p="quests">Quests<small id="tq"></small></div>
+</div>
+<div id="wait"><b>CROSSCODE</b><span id="waitline">Loading</span></div>
+<script>
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  // Icons and the portrait arrive as images cut from the running game, never shipped with the mod.
+  const art = {};
+  const img = (key, cls) => art[key] ? `<img class="px ${cls || ""}" src="${art[key]}">` : "";
+  const keys = {};
+  function put(id, html) { if (keys[id] !== html) { keys[id] = html; $(id).innerHTML = html; } }
+  const BONUS = [["hp", "HP"], ["attack", "ATK"], ["defense", "DEF"], ["focus", "FOC"]];
+  const ELC = ["#c8d8f0", "#ff8a4a", "#6fd6ff", "#c79bff", "#6ff0a0"];
+  const clock = t => Math.floor(t / 3600) + ":" + String(Math.floor(t / 60) % 60).padStart(2, "0");
+  let lastUse = 0, state = null;
+
+  function render(s) {
+    if (s.assets) { Object.assign(art, s.assets); if (state) render(state); return; }
+    // the page is up before the game is; the first state means a provider is there to ask for the art
+    if (!state) armada.send({ action: "assets" });
+    state = s;
+    $("wait").style.display = s.ready ? "none" : "flex";
+    $("waitline").textContent = "Start or load a game";
+    if (!s.ready) return;
+    const p = s.player;
+    document.body.className = "e" + p.element;
+    if (art[p.face] && $("faceimg").src !== art[p.face]) $("faceimg").src = art[p.face];
+    $("name").textContent = p.name; $("lvl").textContent = "Lv " + p.level; $("credit").textContent = p.credit.toLocaleString("en-US") + " cr";
+    const hpf = p.maxHp ? p.hp / p.maxHp : 0;
+    $("hp").style.width = Math.min(100, 100 * hpf) + "%"; $("hp").className = hpf < .3 ? "low" : hpf < .6 ? "mid" : "";
+    $("hpt").textContent = p.hp + " / " + p.maxHp;
+    const pips = Math.max(0, Math.round(p.maxSp));
+    put("sp", Array.from({ length: pips }, (_, i) => `<i><b style="transform:scaleX(${Math.max(0, Math.min(1, p.sp - i))})"></b></i>`).join(""));
+    $("spt").textContent = Math.floor(p.sp) + " / " + pips; $("sprow").style.visibility = pips ? "" : "hidden";
+    $("exp").style.width = Math.min(100, 100 * p.exp / p.expMax) + "%"; $("expt").textContent = p.exp + " / " + p.expMax;
+    put("elems", p.elements.map((e, i) => `<div class="el cut ${i === p.element ? "on" : ""} ${e.has && (p.canSwitch || i === p.element) ? "" : "off"}" data-m="${i}">${img(e.icon)}</div>`).join(""));
+    $("area").textContent = [s.area, s.map].filter(Boolean).join("  /  ");
+    $("chests").textContent = s.chests ? "Chests " + s.chests[0] + "/" + s.chests[1] : "";
+    $("time").textContent = clock(s.time || 0);
+
+    const off = !s.inGame || p.itemBlocked;
+    $("cool").style.display = s.inGame && p.itemBlocked ? "block" : "none";
+    $("ti").textContent = s.items.reduce((n, i) => n + i.count, 0) || "";
+    // update item nodes in place so a touch in progress never loses its target
+    const box = $("items"), seen = new Set();
+    if (!s.items.length) box.innerHTML = '<div class="none">No consumables. Pick some up and they appear here, ready to use by touch.</div>';
+    else if (box.firstElementChild && !box.firstElementChild.dataset.id) box.innerHTML = "";
+    s.items.forEach((i, n) => {
+      let el = box.querySelector(`.item[data-id="${i.id}"]`);
+      if (!el) {
+        el = document.createElement("div"); el.className = "item cut"; el.dataset.id = i.id;
+        el.innerHTML = '<img class="px"><div class="t"><div class="n"></div></div><div class="c num"></div>';
+      }
+      if (box.children[n] !== el) box.insertBefore(el, box.children[n] || null);
+      if (art[i.icon] && el.firstChild.src !== art[i.icon]) el.firstChild.src = art[i.icon];
+      el.querySelector(".n").textContent = i.name; el.querySelector(".c").innerHTML = "<small>x</small>" + i.count;
+      el.classList.toggle("off", off);
+      seen.add(String(i.id));
+    });
+    box.querySelectorAll(".item").forEach(el => { if (!seen.has(el.dataset.id)) el.remove(); });
+    showSelection();
+    if (s.used && s.used.n !== lastUse) {
+      lastUse = s.used.n;
+      const el = box.querySelector(`.item[data-id="${s.used.id}"]`);
+      if (el) { el.classList.remove("flash"); el.classList.add(s.used.ok ? "ok" : "no"); setTimeout(() => el.classList.remove("ok", "no"), 500); }
+    }
+
+    put("stats", [["hp", "Max HP", p.maxHp], ["attack", "Attack", p.attack], ["defense", "Defense", p.defense], ["focus", "Focus", p.focus]].map(([k, label, v]) =>
+      `<div class="stat panel cut">${img("i:stat-" + k)}<div><div class="k">${label.toUpperCase()}</div><div class="v num">${v}</div></div></div>`).join(""));
+    put("equip", s.equip.map(e => `<div class="eq">${img(e.icon) || '<img class="px" style="visibility:hidden">'}<span class="s">${esc(e.slot)}</span><span class="n ${e.name ? "" : "dim"}">${esc(e.name || "empty")}<small>${BONUS.map(([k, label]) => e.params[k] ? label + (e.params[k] > 0 ? "+" : "") + e.params[k] : "").filter(Boolean).join("  ")}</small></span>${e.level ? `<span class="l num">Lv ${e.level}</span>` : ""}</div>`).join(""));
+    put("res", p.res.map((r, i) => `<div class="res" style="--c:${ELC[i + 1]}">${img(p.elements[i + 1].icon)}<div class="bar mid"><div style="${r >= 0 ? "left:50%" : "right:50%"};width:${Math.min(50, Math.abs(r) / 2)}%"></div></div><span class="v num">${r > 0 ? "+" : ""}${r}%</span></div>`).join(""));
+    put("buffs", s.buffs.length ? s.buffs.map(b => `<div class="buff">${b.icons.map(k => img(k)).join("")}<u style="width:${Math.round(b.left * 100)}%"></u></div>`).join("") : '<span class="dim" style="font-weight:500">None</span>');
+    $("partybox").style.display = s.party.length ? "" : "none";
+    put("party", s.party.map(m => `<div class="mate"><div style="display:flex;justify-content:space-between"><span>${esc(m.name)} <span class="dim num">Lv ${m.level}</span></span><span class="num">${m.hp}</span></div><div class="bar"><div style="width:${m.maxHp ? Math.min(100, 100 * m.hp / m.maxHp) : 0}%"></div></div></div>`).join(""));
+
+    $("tq").textContent = s.quests.length || "";
+    put("quests", s.quests.length ? s.quests.map(q => `<div class="quest panel cut"><div class="top"><span class="n">${esc(q.name)}</span><span class="st">STEP ${q.step}/${q.steps}</span><span class="lv num">Lv ${q.level}</span></div>
+      <div class="task">${esc(q.task)}</div>${q.subs.map(u => `<div class="sub ${u.done ? "done" : ""}"><span class="box"></span>${u.text ? `<span>${esc(u.text)}</span>` : ""}${u.max ? `<div class="bar"><div style="width:${100 * u.cur / u.max}%"></div></div><span class="num">${u.cur}/${u.max}</span>` : ""}</div>`).join("")}
+      <div class="d">${esc(q.desc)}</div></div>`).join("") : '<div class="none">No active quests</div>');
+  }
+
+  // Using an item spends it, so a tap only selects; the Use button that then appears confirms.
+  // A tap anywhere else, or three seconds without one, cancels.
+  let sel = null, selTimer = 0;
+  function select(id) {
+    sel = id; clearTimeout(selTimer);
+    if (id != null) selTimer = setTimeout(() => select(null), 3000);
+    showSelection();
+  }
+  function showSelection() {
+    const it = state && state.ready && sel != null ? state.items.find(i => i.id === sel) : null;
+    if (sel != null && (!it || !state.inGame || state.player.itemBlocked)) { sel = null; clearTimeout(selTimer); }
+    document.querySelectorAll(".item").forEach(el => el.classList.toggle("sel", sel != null && Number(el.dataset.id) === sel));
+    $("confirm").classList.toggle("on", sel != null);
+    if (sel == null) return;
+    if (art[it.icon]) $("cimg").src = art[it.icon];
+    $("cname").textContent = it.name + "  x" + it.count; $("cdesc").textContent = it.desc;
+  }
+  document.addEventListener("click", e => {
+    const el = e.target.closest(".item");
+    if (e.target.closest("#use")) {
+      if (sel != null) armada.send({ action: "useItem", id: sel });
+      select(null);
+    } else if (el && !el.classList.contains("off")) select(Number(el.dataset.id) === sel ? null : Number(el.dataset.id));
+    else select(null);
+  });
+  $("elems").addEventListener("click", e => {
+    const el = e.target.closest(".el");
+    if (el && !el.classList.contains("off")) armada.send({ action: "element", mode: Number(el.dataset.m) });
+  });
+  // The last tab chosen is kept for the session, across view reloads.
+  function show(name) {
+    document.querySelectorAll(".tab").forEach(o => o.classList.toggle("on", o.dataset.p === name));
+    document.querySelectorAll(".page").forEach(p => p.classList.toggle("on", p.id === "p-" + name));
+    try { sessionStorage.setItem("tab", name); } catch (e) {}
+  }
+  document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => show(t.dataset.p)));
+  try { if ($("p-" + sessionStorage.getItem("tab"))) show(sessionStorage.getItem("tab")); } catch (e) {}
+  armada.onState = render;
+  if (armada.last) render(armada.last);
+</script>
+</body>
+</html>
